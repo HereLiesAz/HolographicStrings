@@ -40,6 +40,16 @@
                 height: 400px;
             }
         }
+        .gemini-button {
+            background-color: #5e4d8c; /* A muted purple for AI features */
+        }
+        .gemini-button:hover {
+            background-color: #4c3d73;
+        }
+        .gemini-button:disabled {
+            background-color: #a9a2b9;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body class="p-4 sm:p-6 lg:p-8">
@@ -75,7 +85,6 @@
                 <hr class="my-8 border-slate-200">
                 <h2 class="text-2xl font-bold text-slate-700 mb-6">2. Deconstruction Analysis</h2>
                 <div class="grid grid-cols-1 xl:grid-cols-5 gap-8">
-                    <!-- Left column: Visualization -->
                     <div class="xl:col-span-3">
                         <h3 class="text-xl font-semibold text-slate-600 mb-3">Primary Resonance Visualization</h3>
                          <p class="text-slate-500 mb-4">The original string, color-coded by the periodic resonances found in Stage 1. Hover over a "Resonance Key" entry to highlight its projection. Uncolored characters are passed to subsequent stages.</p>
@@ -83,11 +92,9 @@
                            <canvas id="visualization-canvas"></canvas>
                         </div>
                     </div>
-                    <!-- Right column: Data Blueprint -->
                     <div class="xl:col-span-2">
                         <h3 class="text-xl font-semibold text-slate-600 mb-3">The Data Blueprint</h3>
                         <div class="space-y-6">
-                            <!-- Stats -->
                             <div class="grid grid-cols-3 gap-4 text-center border-b border-slate-200 pb-4">
                                 <div>
                                     <p class="text-sm text-slate-500">Original</p>
@@ -102,29 +109,40 @@
                                     <p id="ratio" class="text-2xl font-bold mono text-teal-600">-</p>
                                 </div>
                             </div>
-                            <!-- Resonance Key -->
                             <div>
                                 <h4 class="font-semibold text-slate-600 mb-2">Stage 1: Resonance Key</h4>
                                 <div id="key-output" class="text-sm mono space-y-1 max-h-40 overflow-y-auto pr-2 border border-slate-200 rounded-md p-3 bg-slate-50"></div>
                             </div>
-                            <!-- Motif Key -->
                              <div>
                                 <h4 class="font-semibold text-slate-600 mb-2">Stage 2: Aperiodic Motif Key</h4>
                                 <div id="motif-dictionary-output" class="p-3 bg-slate-50 border border-slate-200 rounded-md text-sm mono break-all max-h-24 overflow-y-auto"></div>
                             </div>
-                            <!-- Huffman -->
                             <div>
                                <h4 class="font-semibold text-slate-600 mb-2">Stage 3: Statistical Frequency Key</h4>
                                <div id="huffman-dictionary-output" class="p-3 bg-slate-50 border border-slate-200 rounded-md text-sm mono break-all max-h-24 overflow-y-auto mb-2"></div>
                                <div id="encoded-remnant-output" class="p-3 bg-slate-50 border border-slate-200 rounded-md text-sm mono break-all max-h-24 overflow-y-auto"></div>
                             </div>
-                             <!-- Reconstitution -->
                             <div>
                                 <h4 class="font-semibold text-slate-600 mb-2">Reconstitution Check</h4>
                                 <button id="reconstitute-button" class="w-full bg-white border border-slate-300 text-slate-700 font-bold py-2 px-4 rounded-md hover:bg-slate-50 transition-colors">Reconstitute & Verify</button>
                                 <div id="reconstitution-output" class="mt-2 p-2 bg-slate-100 border border-slate-200 rounded-md text-xs mono break-all text-slate-500 hidden"></div>
                             </div>
                         </div>
+                    </div>
+                </div>
+                
+                <!-- Gemini API Features -->
+                <div id="gemini-features" class="mt-12 pt-8 border-t border-slate-200">
+                    <h2 class="text-2xl font-bold text-slate-700 mb-4 text-center">✨ AI-Powered Insights</h2>
+                    <div class="flex flex-col sm:flex-row justify-center gap-4 mb-6">
+                        <button id="explain-button" class="gemini-button text-white font-bold py-2 px-6 rounded-md transition-colors">Explain Blueprint</button>
+                        <button id="synthesize-button" class="gemini-button text-white font-bold py-2 px-6 rounded-md transition-colors">Synthesize Similar</button>
+                    </div>
+                    <div id="gemini-output-container" class="hidden">
+                         <div id="gemini-spinner" class="text-center p-4">
+                              <svg class="animate-spin inline-block h-8 w-8 text-teal-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                         </div>
+                        <div id="gemini-output" class="p-4 bg-slate-50 border border-slate-200 rounded-md text-slate-600 prose"></div>
                     </div>
                 </div>
             </div>
@@ -164,7 +182,6 @@
                  if (stride % 100 === 0 || stride === maxStride) {
                      const progress = (stride / maxStride) * 80;
                      self.postMessage({ type: 'progress', percentage: progress, label: `Stage 1: Scanning stride ${stride} / ${maxStride}` });
-                     await new Promise(res => setTimeout(res, 0));
                  }
              }
              resonances.sort((a, b) => b.savings - a.savings);
@@ -219,7 +236,6 @@
                 passes++;
                 if(passes % 10 === 0) {
                     self.postMessage({ type: 'progress', percentage: 80 + (passes/200 * 15), label: 'Stage 2: Searching for aperiodic motifs...' });
-                    await new Promise(res => setTimeout(res, 0));
                 }
             }
             return { motifDict, remnant_stage2: currentText };
@@ -250,22 +266,26 @@
 
         self.onmessage = async (e) => {
             const { text } = e.data;
-            const { finalKey, remnant_stage1 } = await resonanceAnalysis(text);
-            const { motifDict, remnant_stage2 } = await motifEncode(remnant_stage1);
-            self.postMessage({ type: 'progress', percentage: 95, label: 'Stage 3: Analyzing statistical noise...' });
-            await new Promise(res => setTimeout(res, 20)); // Yield
-            const { huffmanDict, encodedRemnant } = huffmanEncode(remnant_stage2);
-            
-            self.postMessage({ 
-                type: 'result',
-                payload: {
-                    originalText: text,
-                    key: finalKey.sort((a,b) => a.offset - b.offset), 
-                    motifDict,
-                    huffmanDict,
-                    encodedRemnant
-                }
-            });
+            try {
+                const { finalKey, remnant_stage1 } = await resonanceAnalysis(text);
+                const { motifDict, remnant_stage2 } = await motifEncode(remnant_stage1);
+                self.postMessage({ type: 'progress', percentage: 95, label: 'Stage 3: Analyzing statistical noise...' });
+                await new Promise(res => setTimeout(res, 20)); // Yield
+                const { huffmanDict, encodedRemnant } = huffmanEncode(remnant_stage2);
+                
+                self.postMessage({ 
+                    type: 'result',
+                    payload: {
+                        originalText: text,
+                        key: finalKey.sort((a,b) => a.offset - b.offset), 
+                        motifDict,
+                        huffmanDict,
+                        encodedRemnant
+                    }
+                });
+            } catch (error) {
+                 self.postMessage({ type: 'error', message: error.message });
+            }
         };
     </script>
 
@@ -275,6 +295,8 @@
             const analyzeBtn = document.getElementById('analyze-button');
             const cancelBtn = document.getElementById('cancel-button');
             const reconstituteBtn = document.getElementById('reconstitute-button');
+            const explainBtn = document.getElementById('explain-button');
+            const synthesizeBtn = document.getElementById('synthesize-button');
             const canvas = document.getElementById('visualization-canvas');
             const ctx = canvas.getContext('2d');
 
@@ -293,12 +315,16 @@
             const encodedRemnantEl = document.getElementById('encoded-remnant-output');
             const reconstitutionEl = document.getElementById('reconstitution-output');
 
+            const geminiOutputContainer = document.getElementById('gemini-output-container');
+            const geminiSpinner = document.getElementById('gemini-spinner');
+            const geminiOutput = document.getElementById('gemini-output');
+
             let analysisResult = null;
             let hoveredKeyIndex = -1;
             let analysisWorker = null;
             
             const PALETTE = ['#0d9488', '#d97706', '#be185d', '#65a30d', '#57534e', '#8b5cf6'];
-            const MAX_RECOMMENDED_LENGTH = 10000;
+            const MAX_RECOMMENDED_LENGTH = 40000;
 
             const updateProgress = (percentage, label) => {
                 progressBar.style.width = `${percentage}%`;
@@ -325,7 +351,7 @@
                 analysisWorker = new Worker(URL.createObjectURL(workerBlob));
                 
                 analysisWorker.onmessage = (e) => {
-                    const { type, payload, percentage, label } = e.data;
+                    const { type, payload, percentage, label, message } = e.data;
                     if (type === 'progress') {
                         updateProgress(percentage, label);
                     } else if (type === 'result') {
@@ -334,6 +360,10 @@
                         updateUI();
                         drawVisualization();
                         resultsArea.classList.remove('hidden');
+                        terminateWorker();
+                    } else if (type === 'error') {
+                        console.error('Worker error:', message);
+                        updateProgress(0, `An error occurred: ${message}`);
                         terminateWorker();
                     }
                 };
@@ -424,6 +454,87 @@
                 encodedRemnantEl.textContent = encodedRemnant || 'N/A';
                 reconstitutionEl.classList.add('hidden');
             };
+            
+            const callGemini = async (prompt) => {
+                geminiOutputContainer.classList.remove('hidden');
+                geminiSpinner.classList.remove('hidden');
+                geminiOutput.classList.add('hidden');
+                [explainBtn, synthesizeBtn].forEach(b => b.disabled = true);
+
+                let chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+                const payload = { contents: chatHistory };
+                const apiKey = "";
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (!response.ok) {
+                        throw new Error(`API call failed with status: ${response.status}`);
+                    }
+                    const result = await response.json();
+                    
+                    if (result.candidates && result.candidates.length > 0 &&
+                        result.candidates[0].content && result.candidates[0].content.parts &&
+                        result.candidates[0].content.parts.length > 0) {
+                        return result.candidates[0].content.parts[0].text;
+                    } else {
+                        throw new Error("Invalid response structure from Gemini API.");
+                    }
+                } catch (error) {
+                    console.error("Gemini API Error:", error);
+                    return `Error: Could not get a response from the AI. ${error.message}`;
+                } finally {
+                     geminiSpinner.classList.add('hidden');
+                     geminiOutput.classList.remove('hidden');
+                     [explainBtn, synthesizeBtn].forEach(b => b.disabled = false);
+                }
+            };
+
+            const handleExplain = async () => {
+                if (!analysisResult) return;
+                const { key, motifDict } = analysisResult;
+                const keyString = key.map(k => k.desc).join(', ');
+                const motifString = Object.entries(motifDict).map(([k,v]) => `"${v}"`).join(', ');
+
+                const prompt = `You are a data structure analyst. Based on the following three-stage compression analysis of a string, provide a brief, human-readable explanation of its structure in 2-3 sentences.
+                - The primary periodic patterns found were: ${keyString || 'None'}.
+                - The most common literal phrases found were: ${motifString || 'None'}.
+                Describe the string's nature based on these findings. For example, if you see patterns involving 'L' and numbers, it might be SVG path data.`;
+                
+                const explanation = await callGemini(prompt);
+                geminiOutput.innerHTML = explanation.replace(/\n/g, '<br>');
+            };
+
+            const handleSynthesize = async () => {
+                if (!analysisResult) return;
+                const { key, motifDict } = analysisResult;
+                const keyString = key.map(k => k.desc).join(', ');
+                const motifString = Object.entries(motifDict).map(([k,v]) => `"${v}"`).join(', ');
+
+                const inspirationPrompt = `You are a data structure analyst. Briefly describe the structure of a string that has these characteristics in a few keywords:
+                - Periodic patterns: ${keyString || 'None'}.
+                - Common literal phrases: ${motifString || 'None'}.
+                Example output: "SVG path data, long lines, repeating coordinates".`;
+
+                const inspiration = await callGemini(inspirationPrompt);
+                if (inspiration.startsWith('Error:')) {
+                    geminiOutput.textContent = inspiration;
+                    return;
+                }
+                
+                geminiOutput.innerHTML = `<em>Inspired by: "${inspiration.replace(/\n/g, ' ')}". Generating new string...</em>`;
+
+                const generationPrompt = `Generate a new, original string that has a similar structure to this description: "${inspiration}".
+                The new string should be different from any examples, about 200-300 characters long, and feel authentic to the described structure. Do not include any explanations, just the raw string.`;
+                
+                const newString = await callGemini(generationPrompt);
+                inputEl.value = newString;
+                geminiOutput.innerHTML += `<br><br><strong>New Waveform Generated:</strong><br><div class="mono text-xs">${newString}</div><br>Click "Analyze" to deconstruct it.`;
+            };
 
             const reconstitute = () => {
                 if (!analysisResult) return;
@@ -476,9 +587,11 @@
             analyzeBtn.addEventListener('click', analyze);
             cancelBtn.addEventListener('click', () => { if (analysisWorker) terminateWorker(); });
             reconstituteBtn.addEventListener('click', reconstitute);
+            explainBtn.addEventListener('click', handleExplain);
+            synthesizeBtn.addEventListener('click', handleSynthesize);
+
             window.addEventListener('resize', () => { if(analysisResult) drawVisualization(); });
             
-            inputEl.value = "";
             analyze();
         });
     </script>
