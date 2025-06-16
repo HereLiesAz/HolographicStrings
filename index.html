@@ -55,7 +55,22 @@
                 <h2 class="text-2xl font-bold text-slate-700 mb-2">1. Input Waveform</h2>
                 <p class="text-slate-500 mb-4">Enter a string to deconstruct. The engine will perform a tiered analysis for periodic, aperiodic, and statistical redundancies.</p>
                 <textarea id="input-text" class="w-full h-28 p-3 border border-slate-300 rounded-md focus:ring-2 focus:ring-teal-500 focus:outline-none mono bg-slate-50" placeholder="e.g., M340.5,26.18L335.5,27.07..."></textarea>
-                <button id="analyze-button" class="mt-4 w-full sm:w-auto bg-slate-800 text-white font-bold py-2 px-8 rounded-md hover:bg-slate-900 transition-colors">Analyze</button>
+                <div class="mt-4">
+                    <button id="analyze-button" class="w-full sm:w-auto bg-slate-800 text-white font-bold py-2 px-8 rounded-md hover:bg-slate-900 transition-colors disabled:bg-slate-400">
+                        <span id="button-text">Analyze</span>
+                        <span id="button-spinner" class="hidden">
+                            <svg class="animate-spin inline-block h-5 w-5 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                            Processing...
+                        </span>
+                    </button>
+                </div>
+            </div>
+
+             <div id="progress-container" class="hidden my-6">
+                <p id="progress-label" class="text-sm text-center text-slate-500 mb-2">Analyzing...</p>
+                <div class="w-full bg-slate-200 rounded-full h-2.5">
+                    <div id="progress-bar" class="bg-teal-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
             </div>
             
             <div id="results-area" class="hidden">
@@ -126,6 +141,12 @@
             const canvas = document.getElementById('visualization-canvas');
             const ctx = canvas.getContext('2d');
 
+            const buttonText = document.getElementById('button-text');
+            const buttonSpinner = document.getElementById('button-spinner');
+            const progressContainer = document.getElementById('progress-container');
+            const progressBar = document.getElementById('progress-bar');
+            const progressLabel = document.getElementById('progress-label');
+
             const resultsArea = document.getElementById('results-area');
             const originalLengthEl = document.getElementById('original-length');
             const finalLengthEl = document.getElementById('final-length');
@@ -142,17 +163,58 @@
             const PALETTE = ['#0d9488', '#d97706', '#be185d', '#65a30d', '#57534e', '#8b5cf6'];
             const SIGIL_START = 0xE000;
 
-            const analyze = () => {
+            const updateProgress = (percentage, label) => {
+                progressBar.style.width = `${percentage}%`;
+                if (label) progressLabel.textContent = label;
+            };
+            
+            const toggleButtonState = (isProcessing) => {
+                analyzeBtn.disabled = isProcessing;
+                buttonText.classList.toggle('hidden', isProcessing);
+                buttonSpinner.classList.toggle('hidden', !isProcessing);
+            };
+
+            const analyze = async () => {
                 const text = inputEl.value;
                 if (!text) return;
+                
+                toggleButtonState(true);
+                progressContainer.classList.remove('hidden');
+                resultsArea.classList.add('hidden');
 
-                // Stage 1: Resonance Analysis
-                let resonances = [];
-                for (let stride = 1; stride <= text.length / 2; stride++) {
+                const { finalKey, remnant_stage1 } = await resonanceAnalysis(text);
+                const { motifDict, remnant_stage2 } = await motifEncode(remnant_stage1);
+                updateProgress(95, 'Stage 3: Analyzing statistical noise...');
+                await new Promise(res => setTimeout(res, 20));
+                const { huffmanDict, encodedRemnant } = huffmanEncode(remnant_stage2);
+                
+                analysisResult = { 
+                    originalText: text, 
+                    key: finalKey.sort((a,b) => a.offset - b.offset), 
+                    motifDict,
+                    huffmanDict,
+                    encodedRemnant
+                };
+                
+                updateProgress(100, 'Analysis complete.');
+                updateUI();
+                drawVisualization();
+                resultsArea.classList.remove('hidden');
+                setTimeout(() => {
+                    progressContainer.classList.add('hidden');
+                    toggleButtonState(false);
+                }, 1000);
+            };
+            
+            const resonanceAnalysis = async (text) => {
+                 updateProgress(0, 'Stage 1: Scanning for periodic resonances...');
+                 let resonances = [];
+                 const maxStride = Math.floor(text.length / 2);
+                 for (let stride = 1; stride <= maxStride; stride++) {
                     for (let offset = 0; offset < stride; offset++) {
-                        if (offset + stride >= text.length) continue;
-                        let i = offset;
-                        while(i < text.length) {
+                         if (offset + stride >= text.length) continue;
+                         let i = offset;
+                         while(i < text.length) {
                              const char = text[i];
                              let count = 1;
                              let currentPos = i + stride;
@@ -163,70 +225,50 @@
                              if (count > 1) {
                                  const keyDesc = `(${char},${stride},${count},${i})`;
                                  const savings = (count) - keyDesc.length;
-                                 if (savings > 0) {
-                                     resonances.push({ char, stride, count, offset: i, savings, desc: keyDesc });
-                                 }
+                                 if (savings > 0) resonances.push({ char, stride, count, offset: i, savings, desc: keyDesc });
                                  i += (count * stride);
                              } else {
                                 i += stride;
                              }
-                        }
+                         }
                     }
-                }
-                
-                resonances.sort((a, b) => b.savings - a.savings);
-                const finalKey = [];
-                const claimedPositions = new Array(text.length).fill(false);
-                
-                for (const res of resonances) {
-                    let canBeClaimed = true;
-                    for (let i = 0; i < res.count; i++) {
-                        if (claimedPositions[res.offset + i * res.stride]) {
-                            canBeClaimed = false;
-                            break;
-                        }
-                    }
-                    if (canBeClaimed) {
-                        finalKey.push(res);
-                        for (let i = 0; i < res.count; i++) claimedPositions[res.offset + i * res.stride] = true;
-                    }
-                }
-
-                let remnant_stage1 = '';
-                for (let i = 0; i < text.length; i++) {
-                    if (!claimedPositions[i]) remnant_stage1 += text[i];
-                }
-
-                // Stage 2: Aperiodic Motif Scan
-                const { motifDict, remnant_stage2 } = motifEncode(remnant_stage1);
-
-                // Stage 3: Huffman Coding of Remnant
-                const { huffmanDict, encodedRemnant } = huffmanEncode(remnant_stage2);
-                
-                analysisResult = { 
-                    originalText: text, 
-                    key: finalKey.sort((a,b) => a.offset - b.offset), 
-                    motifDict,
-                    huffmanDict,
-                    encodedRemnant
-                };
-
-                resultsArea.classList.remove('hidden');
-                updateUI();
-                drawVisualization();
+                     if (stride % 10 === 0) {
+                         const progress = (stride / maxStride) * 80;
+                         updateProgress(progress, `Stage 1: Scanning stride ${stride} / ${maxStride}`);
+                         await new Promise(res => setTimeout(res, 0));
+                     }
+                 }
+                 resonances.sort((a, b) => b.savings - a.savings);
+                 const finalKey = [];
+                 const claimedPositions = new Array(text.length).fill(false);
+                 for (const res of resonances) {
+                     let canBeClaimed = true;
+                     for (let i = 0; i < res.count; i++) {
+                         if (claimedPositions[res.offset + i * res.stride]) { canBeClaimed = false; break; }
+                     }
+                     if (canBeClaimed) {
+                         finalKey.push(res);
+                         for (let i = 0; i < res.count; i++) claimedPositions[res.offset + i * res.stride] = true;
+                     }
+                 }
+                 let remnant_stage1 = '';
+                 for (let i = 0; i < text.length; i++) {
+                     if (!claimedPositions[i]) remnant_stage1 += text[i];
+                 }
+                 return { finalKey, remnant_stage1 };
             };
 
-            const motifEncode = (text) => {
+            const motifEncode = async (text) => {
+                updateProgress(80, 'Stage 2: Searching for aperiodic motifs...');
                 let currentText = text;
                 const motifDict = {};
                 let sigilCounter = 0;
                 const getNextSigil = () => String.fromCharCode(SIGIL_START + sigilCounter++);
-
+                let passes = 0;
                 while (true) {
                     let bestMotif = '';
                     let maxSavings = 0;
-                    if (currentText.length < 4) break;
-
+                    if (currentText.length < 4 || passes > 200) break;
                     for (let len = Math.floor(currentText.length / 2); len > 1; len--) {
                         if (len <= bestMotif.length) continue;
                         const counts = {};
@@ -237,29 +279,26 @@
                         for (const motif in counts) {
                             if (counts[motif] > 1) {
                                 const savings = (counts[motif] * motif.length) - (counts[motif] + motif.length + 1);
-                                if (savings > maxSavings) {
-                                    maxSavings = savings;
-                                    bestMotif = motif;
-                                }
+                                if (savings > maxSavings) { maxSavings = savings; bestMotif = motif; }
                             }
                         }
                     }
-
                     if (!bestMotif) break;
-
                     const sigil = getNextSigil();
                     motifDict[sigil] = bestMotif;
                     currentText = currentText.replace(new RegExp(bestMotif.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), sigil);
+                    passes++;
+                    if(passes % 5 === 0) {
+                        updateProgress(80 + (passes/200 * 15), 'Stage 2: Searching for aperiodic motifs...');
+                        await new Promise(res => setTimeout(res, 0));
+                    }
                 }
                 return { motifDict, remnant_stage2: currentText };
             };
             
             const huffmanEncode = (text) => {
                 if (!text) return { huffmanDict: {}, encodedRemnant: '' };
-                const freq = [...text].reduce((acc, char) => {
-                    acc[char] = (acc[char] || 0) + 1;
-                    return acc;
-                }, {});
+                const freq = [...text].reduce((acc, char) => ({...acc, [char]: (acc[char] || 0) + 1}), {});
                 const nodes = Object.entries(freq).map(([char, freq]) => ({ char, freq, left: null, right: null }));
                 if (nodes.length === 1) return { huffmanDict: {[nodes[0].char]: '0'}, encodedRemnant: '0'.repeat(nodes[0].freq) };
                 while(nodes.length > 1) {
@@ -271,10 +310,7 @@
                 const huffmanDict = {};
                 const buildDict = (node, path) => {
                     if (!node) return;
-                    if (node.char) {
-                        huffmanDict[node.char] = path || '0';
-                        return;
-                    }
+                    if (node.char) { huffmanDict[node.char] = path || '0'; return; }
                     buildDict(node.left, path + '0');
                     buildDict(node.right, path + '1');
                 }
@@ -342,7 +378,7 @@
                     entry.onmouseenter = () => { hoveredKeyIndex = index; drawVisualization(); };
                     entry.onmouseleave = () => { hoveredKeyIndex = -1; drawVisualization(); };
                     keyEl.appendChild(entry);
-});
+                });
 
                 motifDictEl.textContent = Object.keys(motifDict).length > 0 ? Object.entries(motifDict).map(([k, v]) => `'${k}' ↦ "${v}"`).join(' | ') : 'None';
                 huffmanDictEl.textContent = Object.keys(huffmanDict).length > 0 ? Object.entries(huffmanDict).map(([k, v]) => `'${k}':${v}`).join(', ') : 'None';
@@ -353,8 +389,6 @@
             const reconstitute = () => {
                 if (!analysisResult) return;
                 const { originalText, key, motifDict, huffmanDict, encodedRemnant } = analysisResult;
-                
-                // Stage 3 Decode: Huffman
                 let remnant_stage2 = '';
                 if (encodedRemnant) {
                     const reversedHuffman = Object.entries(huffmanDict).reduce((acc, [char, code]) => ({...acc, [code]: char}), {});
@@ -371,25 +405,19 @@
                         }
                     }
                 }
-                
-                // Stage 2 Decode: Motifs
                 let remnant_stage1 = remnant_stage2;
                 const reversedMotifs = Object.entries(motifDict).reverse();
                 for (const [sigil, motif] of reversedMotifs) {
-                     remnant_stage1 = remnant_stage1.replace(new RegExp(sigil, 'g'), motif);
+                     remnant_stage1 = remnant_stage1.replace(new RegExp(sigil, 'g'), sigil);
                 }
-
-                // Stage 1 Decode: Resonances
                 let buffer = new Array(originalText.length).fill(null);
                 key.forEach(res => {
                     for(let i=0; i < res.count; i++) buffer[res.offset + i * res.stride] = res.char;
                 });
-                
                 let remnantIndex = 0;
                 for(let i=0; i < buffer.length; i++) {
                     if (buffer[i] === null) buffer[i] = remnant_stage1[remnantIndex++];
                 }
-                
                 const reconstitutedText = buffer.join('');
                 const isLossless = reconstitutedText === originalText;
                 reconstitutionEl.textContent = `Verification: ${isLossless ? 'Perfect Match!' : 'Mismatch Detected.'}\n\n${reconstitutedText}`;
@@ -406,9 +434,11 @@
             reconstituteBtn.addEventListener('click', reconstitute);
             window.addEventListener('resize', () => { if(analysisResult) drawVisualization(); });
             
-            inputEl.value = "abcdeabcdeabcdeabcdeabcdePAPAPAPAPAzzyyzzxxyyzz";
+            inputEl.value = "M340.5,26.18L335.5,27.07L331.79,27.64L328.08,28.2L326.89,29.63L325.71,31.05L325.33,40.78L324.94,50.5L324.97,55.35L325,60.2L323.33,63.02L321.66,65.85L318.08,67.38L314.5,68.9L303.5,70.55L292.5,72.19L280.5,75.2L268.5,78.2L248,85.69L227.5,93.18L214.5,99.58L201.5,105.99L191,";
             analyze();
         });
     </script>
 </body>
 </html>
+```
+06/16/2025 12:40
